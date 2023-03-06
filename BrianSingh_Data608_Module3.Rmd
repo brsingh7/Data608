@@ -1,0 +1,133 @@
+---
+title: "BrianSingh_Data608_module3"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+
+library(tidyverse)
+library(readr)
+library(curl)
+library(ggplot2)
+library(dplyr)
+library(lubridate)
+library(rsconnect)
+
+#authorize account
+rsconnect::setAccountInfo(name='bsingh7', token='B364B8FDA55010DBF0B0020EF081759D', secret='la+QipXG+OV8vAa1Av2giNtCe9CVyrbZPxGik1Lh')
+
+#load data
+cdc<-read.csv(curl("https://raw.githubusercontent.com/charleyferrari/CUNY_DATA_608/master/module3/data/cleaned-cdc-mortality-1999-2010-2.csv"))
+cdc_2010 <- cdc %>%
+    filter(Year == 2010)
+
+library(shiny)
+
+colors <- c("National_Avg"="blue","Crude_Mortality_Rate"="black")
+
+cdc2 <- cdc %>%
+    group_by(ICD.Chapter,Year) %>%
+    mutate(national_avg = round(sum(Deaths)/sum(Population) * 10^5, 1))
+
+cdc2$Year <- as.Date(as.character(cdc2$Year),format("%Y"))
+```
+
+# Crude Mortality Rate by Cause of Death
+Column {data-width=1000}
+-----------------------------------------------------------------------
+```{r}
+shinyApp(ui <- fluidPage(
+
+    # Application title
+    titlePanel("Crude Mortality Rate by Cause of Death"),
+
+    # Sidebar with a drop down for cause of death
+    sidebarLayout(
+        sidebarPanel(
+            selectInput("var",
+                        label = "Choose Cause of Death to Display",
+                        choices = cdc_2010$ICD.Chapter,
+                        selected = "Certain conditions originating in the perinatal period")
+        ),
+
+        mainPanel(
+           dataTableOutput("selected_var"),
+           plotOutput("plot_var")
+        )
+    )
+),
+
+server <- function(input, output) {
+    data <- reactive(cdc_2010 %>%
+                         filter(ICD.Chapter == input$var) %>%
+                         select(State, Crude.Rate) %>%
+                         arrange(desc(Crude.Rate)))
+    
+    
+    output$selected_var <- renderDataTable({data()})
+    output$plot_var <- renderPlot({ggplot(data(),mapping=aes(x=reorder(State,Crude.Rate),y=Crude.Rate))+
+            geom_col()+
+            xlab("State")+
+            ylab("Crude Mortality Rate") +
+            coord_flip()})
+},
+    options=list(height=1000,width="100%"))
+
+# Run the application 
+#shinyApp(ui = ui, server = server)
+```
+
+# Crude Mortality Rate by Cause of Death vs National Average
+Column {data-width=1000}
+-----------------------------------------------------------------------
+```{r}
+shinyApp(ui2 <- fluidPage(
+    
+    # Application title
+    titlePanel("Crude Mortality Rate by Cause of Death vs National Average"),
+    
+    # Sidebar with a drop down for cause of death
+    sidebarLayout(
+        sidebarPanel(
+            selectInput("var2",
+                        label = "Choose Cause of Death to Display",
+                        choices = unique(cdc2$ICD.Chapter),
+                        selected = ("Certain conditions originating in the perinatal period")),
+            selectInput("state",
+                        choices = unique(cdc2$State),
+                        label = "Choose a state to display",
+                        selected = ("NY"))
+        ),
+        
+        mainPanel(
+            plotOutput("plot_var2")
+        )
+    )
+),
+
+server2 <- function(input, output) {
+    data2 <- reactive(cdc2 %>%
+                         filter(ICD.Chapter == input$var2 & State == input$state) %>%
+                         select(State, Crude.Rate, national_avg))
+    
+    output$plot_var2 <- renderPlot({ggplot(data2(),aes(x=Year))+
+            geom_line(aes(y=Crude.Rate,color="Crude_Rate")) +
+            geom_line(aes(y=national_avg,color="National_Avg")) +
+            labs(x="Year", y="Crude Mortality Rate",color = "Legend")+
+            scale_color_manual(values=colors)})
+},
+    options=list(height=1000,width="100%"))
+
+# Run the application 
+#shinyApp(ui = ui2, server = server2)
+```
+
+```{r}
+#Source: 
+```
+
